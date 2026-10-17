@@ -1,0 +1,73 @@
+name: Release plugin
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLUGIN_NAME: quiz-bank
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 读取 manifest 版本
+        id: version
+        run: echo "value=$(node -p "require('./manifest.json').version")" >> $GITHUB_OUTPUT
+
+      - name: 校验 tag 与 manifest 版本一致
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          MANIFEST="${{ steps.version.outputs.value }}"
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::tag ($TAG) 与 manifest.json 的 version ($MANIFEST) 不一致"
+            exit 1
+          fi
+
+      - name: 构建 main.js
+        run: |
+          if [ -f package.json ]; then
+            npm install
+            npm run build
+          else
+            # 仓库里没有 package.json / src，用内联脚本从构建源生成产物
+            echo "没有 package.json，改用 tools/inline_xlsx.py 生成 main.js"
+            python tools/inline_xlsx.py
+            python tools/inline_xlsx.py --check
+            node --check main.js
+            node tools/test_inline.js
+            node tools/audit_core.js
+          fi
+
+      - name: 打包 Release 资产
+        run: |
+          mkdir -p dist
+          cp main.js manifest.json styles.css dist/
+          cd dist && zip -r "../${{ env.PLUGIN_NAME }}-${{ steps.version.outputs.value }}.zip" ./*
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.version.outputs.value }}
+          tag_name: ${{ steps.version.outputs.value }}
+          files: |
+            main.js
+            manifest.json
+            styles.css
+            ${{ env.PLUGIN_NAME }}-${{ steps.version.outputs.value }}.zip

@@ -1,0 +1,2292 @@
+/* ============================================================
+   题库刷题插件 v2.7.4 - 样式表（现代化重构版）
+   Modern UI Refresh — 桌面端 / 安卓手机 / 安卓平板
+   ------------------------------------------------------------
+   ⚠️ 本文件仅涉及视觉层（配色、圆角、阴影、间距、动效、布局微调），
+      未改动任何交互逻辑、DOM 结构或类名。
+   ------------------------------------------------------------
+   设计要点：
+   1. 全量使用 Obsidian 官方变量 + 兜底值，自动适配明/暗主题；
+   2. 统一设计令牌（圆角/阴影/间距/动效曲线），风格更现代克制；
+   3. 采用「柔和分层」替代硬边框，弱化线框、强化质感；
+   4. 移动端（安卓手机/平板）增大触控热区 ≥44px，底部安全区适配；
+   5. 保留原有全部类名与状态类（selected/correct/wrong/disabled 等）。
+   ============================================================ */
+
+/* ============================================================
+   0. 设计令牌（Design Tokens）
+   ============================================================ */
+.quiz-container,
+.quiz-modal,
+.quiz-mobile-content {
+  /* --- 语义色（沿用 Obsidian 主题色） ---
+     v2.7.4: 这里先写不依赖 color-mix 的兜底值。自定义属性不做语法校验，
+     若直接写 color-mix，在旧 WebView（Chromium < 111）上 var() 替换后是
+     "计算值无效"，底色不会回落到兜底色而是直接消失。支持 color-mix 的环境
+     由下方 @supports 覆盖为主题色精确混色。 */
+  --quiz-correct-bg: rgba(34, 197, 94, 0.12);
+  --quiz-correct-border: rgba(34, 197, 94, 0.35);
+  --quiz-correct-text: var(--text-normal, #222222);
+  --quiz-wrong-bg: rgba(239, 68, 68, 0.12);
+  --quiz-wrong-border: rgba(239, 68, 68, 0.35);
+  --quiz-wrong-text: var(--text-normal, #222222);
+  --quiz-selected-bg: var(--background-modifier-active-hover, var(--background-modifier-hover, rgba(120, 120, 120, 0.12)));
+  --quiz-selected-border: var(--interactive-accent, #2563eb);
+
+  /* --- 表面 / 文本 --- */
+  --quiz-card-bg: var(--background-secondary, #f6f7f9);
+  --quiz-card-border: var(--background-modifier-border, #d0d7de);
+  --quiz-hover-bg: var(--background-modifier-hover, rgba(120, 120, 120, 0.08));
+  --quiz-surface-raised: var(--background-primary, #ffffff);
+  --quiz-text-primary: var(--text-normal, #222222);
+  --quiz-text-secondary: var(--text-muted, #6b7280);
+  --quiz-text-faint: var(--text-faint, #9ca3af);
+
+  /* --- 强调色 --- */
+  --quiz-accent: var(--interactive-accent, #2563eb);
+  --quiz-accent-hover: var(--interactive-accent-hover, #1d4ed8);
+  --quiz-accent-soft: rgba(37, 99, 235, 0.14);
+  --quiz-accent-ring: rgba(37, 99, 235, 0.32);
+  --quiz-on-accent: var(--text-on-accent, #ffffff);
+
+  /* --- 圆角体系（更现代的柔和圆角） --- */
+  --quiz-radius-xs: 6px;
+  --quiz-radius-sm: 10px;
+  --quiz-radius: 14px;
+  --quiz-radius-lg: 20px;
+  --quiz-radius-pill: 999px;
+
+  /* --- 阴影体系（分层，暗色主题下依然可见） --- */
+  --quiz-shadow-xs: var(--shadow-s, 0 1px 2px rgba(0, 0, 0, 0.06));
+  --quiz-shadow-sm: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.07));
+  --quiz-shadow: var(--shadow-s, 0 4px 16px rgba(0, 0, 0, 0.09));
+  --quiz-shadow-lg: var(--shadow-l, 0 12px 32px rgba(0, 0, 0, 0.14));
+
+  /* --- 间距与尺寸 --- */
+  --quiz-gap-xs: 6px;
+  --quiz-gap-sm: 10px;
+  --quiz-gap: 14px;
+  --quiz-gap-lg: 20px;
+  --quiz-touch: 44px;          /* 移动端最小触控热区 */
+
+  /* --- 题干/选项字号唯一来源：两者引用同一变量，字体大小天然一致 --- */
+  --quiz-opt-fs: calc(14.5px * var(--quiz-font-scale, 1));
+
+  /* --- 动效（统一曲线，更顺滑） --- */
+  --quiz-transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --quiz-transition-slow: 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  --quiz-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+
+/* v2.7.4: 支持 color-mix 的环境用主题色精确混色；不支持的环境停留在上面的 rgba 兜底值 */
+@supports (color: color-mix(in oklch, red, blue)) {
+  .quiz-container,
+  .quiz-modal,
+  .quiz-mobile-content {
+    --quiz-correct-bg: color-mix(in oklch, var(--text-success, #22c55e) 12%, transparent);
+    --quiz-correct-border: color-mix(in oklch, var(--text-success, #22c55e) 35%, transparent);
+    --quiz-wrong-bg: color-mix(in oklch, var(--text-error, #ef4444) 12%, transparent);
+    --quiz-wrong-border: color-mix(in oklch, var(--text-error, #ef4444) 35%, transparent);
+    --quiz-accent-soft: color-mix(in oklch, var(--interactive-accent, #2563eb) 14%, transparent);
+    --quiz-accent-ring: color-mix(in oklch, var(--interactive-accent, #2563eb) 32%, transparent);
+  }
+}
+
+/* ============================================================
+   1. 容器
+   ============================================================ */
+.quiz-container {
+  padding: var(--quiz-gap-lg);
+  /* v2.7.6: 不再给容器写死 1040px。
+     原来写死宽度 + 「769–1280px 放开到 100%」的媒体查询叠加，会让
+     窗口 ≥1281px 时内容反而比 1280px 更窄（断点断层），大屏两侧空出数百像素。
+     现在容器跟随窗口，改由两个令牌分别约束正文与列表（见第 33 节）。 */
+  max-width: none;
+  --quiz-read-width: 1080px;   /* 题干 / 选项 / 操作栏：保证行长可读 */
+  --quiz-page-width: 1600px;   /* 题库列表 / 章节树 / 搜索结果：可铺满多列 */
+  margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--quiz-text-primary);
+  min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.quiz-container * {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   2. 顶部导航栏 —— 悬浮玻璃质感 + 吸顶（移动端）
+   ============================================================ */
+.quiz-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: var(--quiz-gap);
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  gap: var(--quiz-gap-sm);
+  flex-wrap: wrap;
+  box-shadow: var(--quiz-shadow-xs);
+}
+
+.quiz-nav-left,
+.quiz-nav-right {
+  display: flex;
+  align-items: center;
+  gap: var(--quiz-gap-xs);
+  min-width: 0;
+}
+
+.quiz-nav-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.quiz-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--quiz-radius-sm);
+  background: transparent;
+  color: var(--quiz-text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  transition: background var(--quiz-transition),
+              color var(--quiz-transition),
+              transform var(--quiz-transition),
+              box-shadow var(--quiz-transition);
+}
+
+.quiz-nav-btn:hover {
+  background: var(--quiz-hover-bg);
+  color: var(--quiz-text-primary);
+}
+
+.quiz-nav-btn:active {
+  transform: scale(0.94);
+}
+
+.quiz-nav-btn.active {
+  background: var(--quiz-accent);
+  color: var(--quiz-on-accent);
+  border-color: var(--quiz-accent);
+  box-shadow: 0 2px 8px var(--quiz-accent-ring);
+}
+
+.quiz-nav-title {
+  font-weight: 650;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--quiz-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.quiz-nav-progress {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiz-text-secondary);
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: var(--quiz-radius-pill);
+  background: var(--quiz-hover-bg);
+}
+
+/* 章节面包屑：进度徽章样式的特化，保持低调 */
+.quiz-chapter-breadcrumb {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px !important;
+  color: var(--quiz-text-faint) !important;
+  margin-top: 2px;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+/* ============================================================
+   3. 题库列表
+   ------------------------------------------------------------
+   采用备份方案（v2.6 / .is-android）的分行逻辑：卡片改为纵向排列，
+   信息与操作按钮分成独立的行，按钮不再与信息挤在同一行，
+   同时通过压缩行高，让卡片总高度低于备份版本。
+
+   卡片固定为 3 行，每行职责单一：
+     ┌─────────────────────────────┐
+     │ ① 题库名称 + 改名按钮        │  ← 单行，超长省略
+     ├─────────────────────────────┤
+     │ ② 题库题数 / 章节 / 练习统计 │  ← 单行，超长省略
+     ├─────────────────────────────┤
+     │ ③ [刷题][背题][错题][收藏]…  │  ← 按钮独占一行，横向可滚动
+     └─────────────────────────────┘
+   关键：信息行强制单行（white-space: nowrap + ellipsis），
+   按钮行强制单行（flex-wrap: nowrap + overflow-x: auto），
+   从而把卡片总高度压到最低。
+   ============================================================ */
+.quiz-bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--quiz-gap-sm);
+}
+
+/* 纵向排列：信息一组、按钮一组，各占一行 */
+.quiz-bank-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  cursor: pointer;
+  transition: border-color var(--quiz-transition),
+              box-shadow var(--quiz-transition),
+              background var(--quiz-transition);
+}
+
+.quiz-bank-card:hover {
+  border-color: var(--quiz-accent);
+  box-shadow: var(--quiz-shadow-xs);
+}
+
+/* 信息区：本身也是纵向堆叠，但每行都强制单行，避免换行增高 */
+.quiz-bank-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 第①行：题库名称 + 改名按钮 */
+.quiz-bank-name-container {
+  display: flex;
+  align-items: center;
+  gap: var(--quiz-gap-xs);
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.quiz-bank-name {
+  font-weight: 650;
+  font-size: 14.5px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--quiz-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.quiz-edit-name-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  opacity: 0.55;
+  padding: 1px 3px;
+  border-radius: var(--quiz-radius-xs);
+  line-height: 1;
+  flex-shrink: 0;
+  transition: opacity var(--quiz-transition), background var(--quiz-transition);
+}
+
+.quiz-edit-name-btn:hover {
+  opacity: 1;
+  background: var(--quiz-hover-bg);
+}
+
+.quiz-rename-input {
+  font-size: 14.5px;
+  font-weight: 650;
+  padding: 3px 7px;
+  border: 1.5px solid var(--quiz-accent);
+  border-radius: var(--quiz-radius-xs);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  width: 100%;
+  max-width: 220px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+/* 第②行：题数 / 章节 / 练习统计
+   —— 两段文本合并成同一行展示，避免再多占一行。
+   使用 flex + nowrap 让「题库：386 题 | 📂 12 章」与
+   「✍️ 练习：…」并排；空间不足时整体省略而不是换行。 */
+.quiz-bank-meta {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--quiz-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quiz-bank-stats {
+  color: var(--quiz-text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+  border-top: none;      /* 去掉虚线分隔，省掉一行高度 */
+  padding-top: 0;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 第③行：操作按钮独占一行
+   —— 备份方案是 flex-wrap: wrap（按钮多时会折成多行，反而更高）；
+      这里改为 nowrap + 横向滚动，保证按钮永远只占一行。 */
+.quiz-bank-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  margin-left: 0;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1px;
+}
+
+.quiz-bank-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.quiz-bank-actions .quiz-btn {
+  flex: 0 0 auto;
+}
+
+/* 已隐藏题库：降透明度 + 虚线边框 */
+.quiz-bank-card--hidden {
+  opacity: 0.62;
+  border-style: dashed;
+}
+
+.quiz-bank-card--hidden:hover {
+  opacity: 1;
+}
+
+/* ============================================================
+   4. 按钮体系
+   ============================================================ */
+.quiz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 14px;
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  user-select: none;
+  transition: background var(--quiz-transition),
+              color var(--quiz-transition),
+              border-color var(--quiz-transition),
+              box-shadow var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-btn:hover {
+  background: var(--quiz-hover-bg);
+  color: var(--quiz-text-primary);
+  border-color: var(--quiz-card-border);
+}
+
+.quiz-btn:active {
+  transform: scale(0.97);
+}
+
+.quiz-btn:disabled,
+.quiz-btn[disabled] {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.quiz-btn-primary {
+  background: var(--quiz-accent);
+  color: var(--quiz-on-accent);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.quiz-btn-primary:hover {
+  background: var(--quiz-accent-hover);
+  color: var(--quiz-on-accent);
+  box-shadow: 0 3px 12px var(--quiz-accent-ring);
+}
+
+.quiz-btn-danger {
+  color: var(--quiz-wrong-text);
+  border-color: var(--quiz-wrong-border);
+  background: transparent;
+}
+
+.quiz-btn-danger:hover {
+  background: var(--quiz-wrong-bg);
+  color: var(--quiz-wrong-text);
+}
+
+.quiz-btn-success {
+  color: var(--quiz-correct-text);
+  border-color: var(--quiz-correct-border);
+  background: transparent;
+}
+
+.quiz-btn-success:hover {
+  background: var(--quiz-correct-bg);
+}
+
+.quiz-btn-sm {
+  padding: 6px 11px;
+  font-size: 12px;
+  border-radius: var(--quiz-radius-xs);
+}
+
+
+/* ============================================================
+   5. 进度条
+   ============================================================ */
+.quiz-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--quiz-card-border);
+  border-radius: var(--quiz-radius-pill);
+  margin-bottom: var(--quiz-gap);
+  overflow: hidden;
+}
+
+.quiz-progress-fill {
+  height: 100%;
+  background: var(--quiz-accent);   /* v2.7.4: 不支持 color-mix 时的兜底（渐变整条声明会被丢弃） */
+  background: linear-gradient(90deg,
+              var(--quiz-accent),
+              color-mix(in oklch, var(--interactive-accent, #2563eb) 72%, white));
+  border-radius: var(--quiz-radius-pill);
+  transition: width var(--quiz-transition-slow);
+}
+
+/* ============================================================
+   6. 题目卡片
+   ============================================================ */
+.quiz-question-card {
+  background: var(--quiz-surface-raised);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-lg);
+  padding: 26px 26px 24px;
+  margin-bottom: var(--quiz-gap);
+  box-shadow: var(--quiz-shadow-sm);
+}
+
+.quiz-question-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--quiz-gap-sm);
+  margin-bottom: var(--quiz-gap);
+  flex-wrap: wrap;
+}
+
+/* 题型标签 -> 现代胶囊徽章 */
+.quiz-question-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border-radius: var(--quiz-radius-pill);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  background: var(--quiz-accent-soft);
+  color: var(--quiz-accent);
+  border: 1px solid var(--quiz-accent-ring);
+  flex-shrink: 0;
+}
+
+
+.quiz-question-text {
+  font-size: var(--quiz-opt-fs, calc(14.5px * var(--quiz-font-scale, 1)));  /* 与选项字号一致 */
+  line-height: 1.75;
+  margin-bottom: calc(var(--quiz-gap-lg) / 2);   /* 题干与选项间距减半（原 20px） */
+  color: var(--quiz-text-primary);
+  word-break: break-word;
+  white-space: pre-wrap;
+  letter-spacing: 0.005em;
+}
+
+/* ============================================================
+   7. 选项 —— 核心交互区
+   ============================================================ */
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--quiz-gap-xs);   /* 6px：选项间距收紧（原 10px） */
+}
+
+.quiz-option {
+  /* 字号变量 --quiz-opt-fs 在容器令牌区定义（题干与选项共用），此处直接继承 */
+  display: flex;
+  align-items: flex-start;   /* 对齐由序号的动态 margin-top 精确控制（见 .quiz-option-key） */
+  gap: 7px;                  /* 序号与文字间距收紧 */
+  padding: 4px 6px;          /* 内边距减半（原 8px 12px） */
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  background: var(--quiz-surface-raised);
+  cursor: pointer;
+  user-select: text;
+  transition: border-color var(--quiz-transition),
+              background var(--quiz-transition),
+              box-shadow var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-option:hover:not(.disabled) {
+  border-color: var(--quiz-accent-ring);
+  background: var(--quiz-hover-bg);
+  transform: translateX(2px);
+}
+
+.quiz-option.selected {
+  border-color: var(--quiz-selected-border);
+  background: var(--quiz-selected-bg);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+.quiz-option.correct {
+  border-color: var(--quiz-correct-border);
+  background: var(--quiz-correct-bg);
+}
+
+.quiz-option.wrong {
+  border-color: var(--quiz-wrong-border);
+  background: var(--quiz-wrong-bg);
+}
+
+.quiz-option.disabled {
+  cursor: default;
+  opacity: 0.9;
+}
+
+/* 选项字母徽章 */
+.quiz-option-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* 中线精确对齐：margin-top = (首行行框高 − 徽章高) ÷ 2
+     首行行框高 = 字号 × 行高(1.5)，故徽章中心 === 文字首行中心，
+     任意 --quiz-font-scale 下均成立（负值 = 徽章略高出首行，属预期，占用的是内边距空间） */
+  margin-top: calc((var(--quiz-opt-fs, 14.5px) * 1.5 - 26px) / 2);
+  border-radius: var(--quiz-radius-xs);
+  border: 1.5px solid var(--quiz-card-border);
+  background: var(--quiz-card-bg);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--quiz-text-secondary);
+  transition: background var(--quiz-transition),
+              color var(--quiz-transition),
+              border-color var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-option.selected .quiz-option-key {
+  background: var(--quiz-accent);
+  color: var(--quiz-on-accent);
+  border-color: var(--quiz-accent);
+  transform: scale(1.05);
+}
+
+.quiz-option.correct .quiz-option-key {
+  background: var(--text-success, #22c55e);
+  color: #fff;
+  border-color: var(--text-success, #22c55e);
+}
+
+.quiz-option.wrong .quiz-option-key {
+  background: var(--text-error, #ef4444);
+  color: #fff;
+  border-color: var(--text-error, #ef4444);
+}
+
+.quiz-option-text {
+  flex: 1;
+  line-height: 1.5;          /* 行高收紧（原 1.65）；序号中线对齐计算依赖此值，改动需同步 */
+  word-break: break-word;
+  font-size: var(--quiz-opt-fs, calc(14.5px * var(--quiz-font-scale, 1)));
+}
+
+/* ============================================================
+   8. 结果区 / 解析
+   ============================================================ */
+.quiz-result {
+  margin-top: var(--quiz-gap-lg);
+  padding: 16px 18px;
+  border-radius: var(--quiz-radius);
+  font-size: calc(14px * var(--quiz-font-scale, 1));
+  line-height: 1.65;
+  border-left: 4px solid transparent;
+  animation: quiz-slide-in var(--quiz-transition-slow) both;
+}
+
+@keyframes quiz-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.quiz-result.correct {
+  background: var(--quiz-correct-bg);
+  border: 1px solid var(--quiz-correct-border);
+  border-left: 4px solid var(--text-success, #22c55e);
+  color: var(--quiz-correct-text);
+}
+
+.quiz-result.wrong {
+  background: var(--quiz-wrong-bg);
+  border: 1px solid var(--quiz-wrong-border);
+  border-left: 4px solid var(--text-error, #ef4444);
+  color: var(--quiz-wrong-text);
+}
+
+.quiz-result-title {
+  font-weight: 700;
+  margin-bottom: 7px;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+}
+
+.quiz-analysis {
+  margin-top: var(--quiz-gap);
+  padding: 16px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  font-size: calc(13px * var(--quiz-font-scale, 1));
+  line-height: 1.7;
+  color: var(--quiz-text-secondary);
+}
+
+.quiz-analysis-title {
+  font-weight: 650;
+  color: var(--quiz-text-primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quiz-extra-field {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--quiz-card-border);
+}
+
+.quiz-extra-field:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.quiz-extra-field-title {
+  font-weight: 650;
+  font-size: 12.5px;
+  color: var(--quiz-accent);
+  margin-bottom: 4px;
+}
+
+.quiz-extra-field-content {
+  font-size: calc(13px * var(--quiz-font-scale, 1));
+  color: var(--quiz-text-secondary);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+/* ============================================================
+   9. 底部操作栏
+   ============================================================ */
+.quiz-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--quiz-gap-sm);
+  margin-top: var(--quiz-gap-lg);
+  padding: 12px 14px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  flex-wrap: wrap;
+}
+
+.quiz-actions-left,
+.quiz-actions-right {
+  display: flex;
+  gap: var(--quiz-gap-xs);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   10. 搜索框
+   ============================================================ */
+.quiz-search-box {
+  display: flex;
+  gap: var(--quiz-gap-sm);
+  margin-bottom: var(--quiz-gap);
+  flex-wrap: wrap;
+}
+
+.quiz-search-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 11px 15px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-pill);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-search-input:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+.quiz-search-select {
+  padding: 11px 14px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-pill);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-search-select:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+/* ============================================================
+   11. 模态框
+   ============================================================ */
+.quiz-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.quiz-modal-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--quiz-gap-lg);
+  color: var(--quiz-text-primary);
+}
+
+.quiz-modal-section {
+  margin-bottom: var(--quiz-gap-lg);
+}
+
+.quiz-modal-section-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--quiz-text-secondary);
+  margin-bottom: var(--quiz-gap-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   12. 答题卡
+   ============================================================ */
+.quiz-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 8px;
+  margin-bottom: var(--quiz-gap);
+}
+
+.quiz-sheet-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-xs);
+  font-size: 12.5px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  color: var(--quiz-text-secondary);
+  background: var(--quiz-surface-raised);
+  transition: border-color var(--quiz-transition),
+              background var(--quiz-transition),
+              box-shadow var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-sheet-cell:hover {
+  border-color: var(--quiz-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--quiz-shadow-xs);
+}
+
+.quiz-sheet-cell.answered {
+  background: var(--quiz-correct-bg);
+  border-color: var(--quiz-correct-border);
+  color: var(--quiz-correct-text);
+}
+
+.quiz-sheet-cell.wrong {
+  background: var(--quiz-wrong-bg);
+  border-color: var(--quiz-wrong-border);
+  color: var(--quiz-wrong-text);
+}
+
+.quiz-sheet-cell.current {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+  font-weight: 700;
+}
+
+/* ============================================================
+   13. 列表项（错题 / 收藏 / 搜索结果）
+   ============================================================ */
+.quiz-list-item {
+  padding: 15px 17px;
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  margin-bottom: var(--quiz-gap-sm);
+  background: var(--quiz-surface-raised);
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-list-item:hover {
+  border-color: var(--quiz-accent-ring);
+  box-shadow: var(--quiz-shadow-xs);
+}
+
+.quiz-list-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--quiz-gap-sm);
+  margin-bottom: 8px;
+}
+
+.quiz-list-item-text {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--quiz-text-primary);
+  flex: 1;
+}
+
+.quiz-list-item-actions {
+  display: flex;
+  gap: var(--quiz-gap-xs);
+  flex-shrink: 0;
+}
+
+.quiz-list-item-options {
+  font-size: 12.5px;
+  color: var(--quiz-text-secondary);
+  margin-top: 8px;
+  line-height: 1.7;
+}
+
+.quiz-list-item-answer {
+  font-size: 12.5px;
+  color: var(--quiz-correct-text);
+  margin-top: 6px;
+  font-weight: 650;
+}
+
+/* 列表内嵌的题型标签不需要边框感 */
+.quiz-list-item .quiz-question-type {
+  background: var(--quiz-hover-bg);
+  color: var(--quiz-text-secondary);
+  border-color: transparent;
+}
+
+/* ============================================================
+   14. 智能组卷
+   ============================================================ */
+.quiz-group-row {
+  display: flex;
+  align-items: center;
+  gap: var(--quiz-gap-xs);
+  margin-bottom: var(--quiz-gap-xs);
+  padding: 11px 14px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  flex-wrap: wrap;
+}
+
+.quiz-group-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--quiz-text-primary);
+  min-width: 80px;
+}
+
+.quiz-group-input {
+  width: 68px;
+  padding: 7px 10px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-xs);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-group-input:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+/* 答案类型筛选面板 */
+.quiz-group-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 var(--quiz-gap) 0;
+  padding: 12px 14px;
+  background: var(--quiz-hover-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-left: 3px solid var(--quiz-accent);
+  border-radius: var(--quiz-radius-sm);
+}
+
+.quiz-group-filter-title {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--quiz-text-secondary);
+  line-height: 1.5;
+}
+
+.quiz-group-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--quiz-text-primary);
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 2px;
+}
+
+.quiz-group-check input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--quiz-accent);
+  cursor: pointer;
+}
+
+/* 按答案类型精确抽取的小卡片 */
+.quiz-group-cat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-pill);
+  background: var(--quiz-surface-raised);
+  transition: border-color var(--quiz-transition);
+}
+
+.quiz-group-cat-item:hover {
+  border-color: var(--quiz-accent-ring);
+}
+
+.quiz-group-draw-input {
+  width: 56px;
+  padding: 5px 8px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-xs);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 12.5px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-group-draw-input:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+.quiz-group-draw-total {
+  font-size: 12px;
+  color: var(--quiz-text-faint);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   15. 导入模态框
+   ============================================================ */
+.quiz-import-dropzone {
+  width: 100%;
+  min-height: 130px;
+  padding: 26px 20px;
+  border: 2px dashed var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  background: var(--quiz-card-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--quiz-gap-xs);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--quiz-transition),
+              background var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-import-dropzone:hover,
+.quiz-import-dropzone.dragover {
+  border-color: var(--quiz-accent);
+  background: var(--quiz-accent-soft);
+  transform: scale(1.005);
+}
+
+.quiz-import-dropzone-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.quiz-import-dropzone-text {
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--quiz-text-secondary);
+}
+
+.quiz-import-dropzone-hint {
+  font-size: 11.5px;
+  color: var(--quiz-text-faint);
+}
+
+.quiz-import-area {
+  width: 100%;
+  min-height: 130px;
+  padding: 14px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 12px;
+  font-family: var(--font-monospace, ui-monospace, SFMono-Regular, Menlo, monospace);
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+  margin-top: var(--quiz-gap-xs);
+}
+
+.quiz-import-area:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+.quiz-import-preview {
+  margin-top: var(--quiz-gap);
+  padding: 14px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.quiz-import-preview-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--quiz-card-border);
+}
+
+.quiz-import-preview-row:last-child {
+  border-bottom: none;
+}
+
+.quiz-import-error {
+  color: var(--quiz-wrong-text);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.quiz-import-success {
+  color: var(--quiz-correct-text);
+  font-size: 12.5px;
+  font-weight: 550;
+  margin-top: 4px;
+}
+
+.quiz-import-file-info {
+  display: flex;
+  align-items: center;
+  gap: var(--quiz-gap-xs);
+  padding: 11px 14px;
+  background: var(--quiz-accent-soft);
+  border: 1px solid var(--quiz-accent-ring);
+  border-radius: var(--quiz-radius-sm);
+  margin-top: var(--quiz-gap-xs);
+  font-size: 12.5px;
+  color: var(--quiz-text-primary);
+}
+
+.quiz-import-file-remove {
+  cursor: pointer;
+  color: var(--quiz-wrong-text);
+  font-weight: bold;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: var(--quiz-radius-xs);
+  transition: background var(--quiz-transition);
+}
+
+.quiz-import-file-remove:hover {
+  background: var(--quiz-wrong-bg);
+}
+
+/* 重复题处理弹窗 */
+.quiz-dup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--quiz-gap-sm);
+  margin-bottom: var(--quiz-gap-lg);
+}
+
+.quiz-dup-actions .quiz-btn {
+  justify-content: flex-start;
+  padding: 13px 16px;
+  text-align: left;
+  border-radius: var(--quiz-radius-sm);
+}
+
+/* ============================================================
+   16. 编辑模态框
+   ============================================================ */
+.quiz-edit-field {
+  margin-bottom: var(--quiz-gap);
+}
+
+.quiz-edit-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--quiz-text-secondary);
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+.quiz-edit-input,
+.quiz-edit-textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1.5px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  background: var(--quiz-surface-raised);
+  color: var(--quiz-text-primary);
+  font-size: 13.5px;
+  line-height: 1.6;
+  outline: none;
+  transition: border-color var(--quiz-transition), box-shadow var(--quiz-transition);
+}
+
+.quiz-edit-input:focus,
+.quiz-edit-textarea:focus {
+  border-color: var(--quiz-accent);
+  box-shadow: 0 0 0 3px var(--quiz-accent-soft);
+}
+
+.quiz-edit-textarea {
+  min-height: 90px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.quiz-edit-error {
+  color: var(--quiz-wrong-text);
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   17. 统计面板
+   ============================================================ */
+.quiz-stats {
+  display: grid;
+  /* v2.7.6: 加宽度上限。原来 max 是 1fr，1600px 下两个统计项会各占 795px，
+     变成两张细长横条。改 240px 上限 + 靠左排列，与导航左边界对齐。 */
+  grid-template-columns: repeat(auto-fit, minmax(130px, 240px));
+  justify-content: start;
+  gap: var(--quiz-gap-sm);
+  margin-bottom: var(--quiz-gap-lg);
+}
+
+.quiz-stat-card {
+  padding: 16px 12px;
+  background: var(--quiz-card-bg);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  text-align: center;
+  transition: border-color var(--quiz-transition), transform var(--quiz-transition);
+}
+
+.quiz-stat-card:hover {
+  border-color: var(--quiz-accent-ring);
+  transform: translateY(-2px);
+}
+
+.quiz-stat-value {
+  font-size: 24px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiz-accent);
+}
+
+.quiz-stat-label {
+  font-size: 11.5px;
+  color: var(--quiz-text-secondary);
+  margin-top: 4px;
+}
+
+/* ============================================================
+   18. 空状态
+   ============================================================ */
+.quiz-empty {
+  text-align: center;
+  padding: 56px 24px;
+  color: var(--quiz-text-faint);
+}
+
+.quiz-empty-icon {
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: var(--quiz-gap-sm);
+  opacity: 0.85;
+  animation: quiz-float 3.2s ease-in-out infinite;
+}
+
+@keyframes quiz-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.quiz-empty-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--quiz-text-secondary);
+}
+
+/* ============================================================
+   19. 确认对话框
+   ============================================================ */
+.quiz-confirm-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--quiz-gap-xs);
+  color: var(--quiz-text-primary);
+}
+
+.quiz-confirm-message {
+  font-size: 14px;
+  color: var(--quiz-text-secondary);
+  margin-bottom: var(--quiz-gap-lg);
+  line-height: 1.65;
+}
+
+.quiz-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--quiz-gap-sm);
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   20. 相似题推荐
+   ============================================================ */
+.quiz-similar-item {
+  padding: 13px 15px;
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius-sm);
+  margin-bottom: var(--quiz-gap-xs);
+  background: var(--quiz-surface-raised);
+  cursor: pointer;
+  transition: border-color var(--quiz-transition),
+              background var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-similar-item:hover {
+  border-color: var(--quiz-accent);
+  background: var(--quiz-hover-bg);
+  transform: translateX(3px);
+}
+
+.quiz-similar-score {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--quiz-accent);
+  background: var(--quiz-accent-soft);
+  padding: 2px 8px;
+  border-radius: var(--quiz-radius-pill);
+  float: right;
+}
+
+/* ============================================================
+   21. 章节选择页
+   ============================================================ */
+.quiz-chapter-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: var(--quiz-gap-xs);
+  margin-bottom: var(--quiz-gap-lg);   /* v2.7.4: 浮动栏改为 sticky，不再需要预留固定高度 */
+}
+
+.quiz-chapter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--quiz-gap-xs);
+  padding: 12px 14px;
+  border-radius: var(--quiz-radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--quiz-transition),
+              border-color var(--quiz-transition),
+              transform var(--quiz-transition);
+}
+
+.quiz-chapter-row:hover {
+  background: var(--quiz-hover-bg);
+  border-color: var(--quiz-card-border);
+}
+
+.quiz-chapter-row:active {
+  transform: scale(0.995);
+}
+
+.quiz-chapter-toggle {
+  font-size: 9px;
+  color: var(--quiz-text-faint);
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex-shrink: 0;
+  user-select: none;
+  border-radius: var(--quiz-radius-xs);
+  transition: background var(--quiz-transition);
+}
+
+.quiz-chapter-row:hover .quiz-chapter-toggle {
+  background: var(--quiz-hover-bg);
+}
+
+.quiz-chapter-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--quiz-accent);
+}
+
+.quiz-chapter-label {
+  flex: 1;
+  font-size: 14px;
+  color: var(--quiz-text-primary);
+  line-height: 1.5;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quiz-chapter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--quiz-radius-pill);
+  background: var(--quiz-accent-soft);
+  color: var(--quiz-accent);
+  font-size: 11.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* 底部浮动操作栏 */
+.quiz-chapter-floatbar {
+  /* v2.7.4: fixed + left/right:0 会让横栏横跨整个应用窗口（桌面端分屏/侧栏时盖住
+     其它面板与状态栏）。改为 sticky 后只在自身视图宽度内吸底。 */
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--quiz-gap-sm);
+  padding: 14px 20px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--background-primary, #ffffff);
+  border: 1px solid var(--quiz-card-border);
+  border-radius: var(--quiz-radius);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.09);
+  z-index: 10;
+  flex-wrap: wrap;
+}
+
+.quiz-chapter-select-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--quiz-text-primary);
+}
+
+/* ============================================================
+   22. 文字可选中复制
+   ============================================================ */
+.quiz-question-text,
+.quiz-option-text,
+.quiz-analysis,
+.quiz-analysis .quiz-extra-field-content,
+.quiz-result,
+.quiz-list-item-options,
+.quiz-list-item-answer,
+.quiz-extra-field-content,
+.quiz-extra-field-title {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* ============================================================
+   23. 上下文菜单（⋯ 更多操作）
+   ============================================================ */
+.quiz-context-menu {
+  position: fixed;
+  background: var(--background-primary, #ffffff);
+  border: 1px solid var(--background-modifier-border, #d0d7de);
+  border-radius: var(--quiz-radius);
+  padding: 6px;
+  box-shadow: var(--quiz-shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.15));
+  z-index: 10001;
+  min-width: 150px;
+  animation: quiz-menu-in 0.14s ease-out both;
+}
+
+@keyframes quiz-menu-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.quiz-context-menu-item {
+  padding: 10px 13px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-normal, #222222);
+  border-radius: var(--quiz-radius-xs);
+  transition: background 0.15s, color 0.15s;
+  outline: none;
+}
+
+.quiz-context-menu-item:hover,
+.quiz-context-menu-item:focus-visible {
+  background: var(--background-modifier-hover, rgba(120, 120, 120, 0.08));
+  color: var(--quiz-accent);
+}
+
+/* ============================================================
+   24. 键盘焦点可见性（无障碍）
+   ============================================================ */
+.quiz-btn:focus-visible,
+.quiz-nav-btn:focus-visible,
+.quiz-option:focus-visible,
+.quiz-sheet-cell:focus-visible,
+.quiz-list-item:focus-visible,
+.quiz-chapter-row:focus-visible,
+.quiz-search-input:focus-visible {
+  outline: 2px solid var(--quiz-accent, #2563eb);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   25. 内联样式迁移类（保持原有职责，仅微调间距）
+   ============================================================ */
+.quiz-list-practice-btn { margin-bottom: var(--quiz-gap); }
+.quiz-list-clear-btn { margin-top: var(--quiz-gap); }
+.quiz-sheet-stats { margin-top: var(--quiz-gap-lg); }
+.quiz-sheet-clear-btn { margin-top: var(--quiz-gap-lg); }
+.quiz-similar-text { font-size: 13px; margin-top: 6px; line-height: 1.6; }
+.quiz-edit-save-btn { margin-top: var(--quiz-gap); }
+.quiz-import-fmt-line { font-size: 12px; margin-top: 3px; }
+.quiz-import-msg { margin-top: var(--quiz-gap-xs); }
+.quiz-import-btnrow { margin-top: var(--quiz-gap); display: flex; gap: var(--quiz-gap-xs); flex-wrap: wrap; }
+.quiz-import-errors { margin-top: var(--quiz-gap-xs); }
+.quiz-group-gen-btn { margin-top: var(--quiz-gap-lg); }
+.quiz-chapter-select-label { margin-right: var(--quiz-gap-xs); }
+.quiz-chapter-toggle--leaf { visibility: hidden; }
+
+/* hidden 属性兜底 */
+.quiz-import-file-info[hidden],
+.quiz-import-preview[hidden],
+.quiz-edit-error[hidden] {
+  display: none;
+}
+
+/* ============================================================
+   26. 两列题库列表（列数唯一来源）
+   ------------------------------------------------------------
+   题库列表始终两列，宽度平均分配：minmax(0, 1fr) 让两列严格等宽，
+   长题库名也不会把某一列撑宽。
+   ⚠️ 这里（以及更靠后的第 33 节）都不再定义 auto-fill：一旦有别的媒体
+   查询用 auto-fill / auto-fit 覆盖列数，列数就会随窗口宽度乱跳（曾出现
+   1281px 反而比 1280px 少一列、1600px 下变三列的情况）。
+   需要改列数只改这一处。
+   ============================================================ */
+@media (min-width: 700px) {
+  .quiz-bank-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+
+/* ============================================================
+   27. 移动端全屏 Modal 包装
+   ============================================================ */
+.quiz-mobile-modal {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  height: 100vh !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.quiz-mobile-modal .modal-title {
+  display: none !important;
+}
+
+.quiz-mobile-content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px !important;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.quiz-mobile-content > .quiz-container {
+  max-width: none;
+  margin: 0;
+}
+
+/* ============================================================
+   28. 移动端适配（安卓手机 / 窄屏）
+   ------------------------------------------------------------
+   策略：加大尺寸而非缩小 —— 触控热区 ≥44px、字号更清晰、
+        卡片圆角与间距更舒展，避免"缩小版桌面 UI"。
+   ============================================================ */
+@media (max-width: 768px) {
+  .quiz-container {
+    padding: 14px;
+    max-width: none;
+    font-size: 14.5px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* --- 导航：吸顶，横向可滑动，避免换行挤压 --- */
+  .quiz-nav {
+    padding: 8px 12px;
+    margin-bottom: var(--quiz-gap-sm);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--background-primary, #ffffff);
+    backdrop-filter: blur(8px);
+    border-radius: var(--quiz-radius-sm);
+    flex-wrap: nowrap;
+  }
+
+  .quiz-nav-left {
+    overflow: hidden;
+  }
+
+  .quiz-nav-right {
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .quiz-nav-right::-webkit-scrollbar {
+    display: none;
+  }
+
+  .quiz-nav-title {
+    max-width: none;
+    font-size: 15px;
+    flex-shrink: 1;
+  }
+
+  /* 触控热区加大到 44px */
+  .quiz-nav-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .quiz-nav-btn.quiz-font-btn {
+    width: 44px;
+    font-size: 13px;
+  }
+
+  .quiz-nav-progress {
+    font-size: 11.5px;
+    padding: 3px 8px;
+    flex-shrink: 0;
+  }
+
+  /* --- 题目卡片：减少内边距，圆角收一点 --- */
+  .quiz-question-card {
+    padding: 18px 16px;
+    border-radius: var(--quiz-radius);
+    box-shadow: none;
+  }
+
+  .quiz-question-text {
+    margin-bottom: calc(var(--quiz-gap) / 2);   /* 题干与选项间距减半（原 14px）；字号继承容器变量，与选项一致 */
+  }
+
+  /* --- 选项：保持触控可用，同时更紧凑 --- */
+  .quiz-option {
+    padding: 4px 6px;        /* 内边距减半（原 8px 11px） */
+    gap: 7px;
+    border-radius: var(--quiz-radius-sm);
+    min-height: 36px;        /* 随内边距减半同步下调，避免 min-height 反向撑高 */
+  }
+
+  .quiz-option-key {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .quiz-option:hover:not(.disabled) {
+    transform: none;   /* 移动端无悬停，去掉位移避免误触抖动 */
+  }
+
+  /* --- 操作栏：底部固定，按钮等宽分布 --- */
+  .quiz-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 15;
+    margin-top: var(--quiz-gap);
+    margin-left: -14px;
+    margin-right: -14px;
+    margin-bottom: calc(-14px - env(safe-area-inset-bottom, 0px));
+    padding: 12px 14px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: var(--background-primary, #ffffff);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.10);
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+
+  .quiz-actions-left,
+  .quiz-actions-right {
+    gap: var(--quiz-gap-xs);
+    flex-wrap: nowrap;
+  }
+
+  .quiz-actions .quiz-btn {
+    min-height: var(--quiz-touch);
+    padding: 10px 14px;
+    font-size: 13.5px;
+  }
+
+  /* v2.7.4: 安卓端 .quiz-mobile-content 的 padding 是 16px，上面按 14px 算的负边距会错位 2px */
+  .quiz-mobile-content .quiz-actions {
+    margin-left: -16px;
+    margin-right: -16px;
+    margin-bottom: calc(-16px - env(safe-area-inset-bottom, 0px));
+  }
+
+  /* --- 按钮：移动端加大 --- */
+  .quiz-btn {
+    min-height: 40px;
+    padding: 9px 14px;
+  }
+
+  .quiz-btn-sm {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+  }
+
+  /* --- 题库卡片：三行结构（名称 / 信息 / 按钮），保持单行不换行 --- */
+  .quiz-bank-card {
+    padding: 10px 12px;
+    gap: 5px;
+    border-radius: var(--quiz-radius-sm);
+  }
+
+  .quiz-bank-name {
+    font-size: 14px;
+  }
+
+  .quiz-bank-meta,
+  .quiz-bank-stats {
+    font-size: 11px;
+  }
+
+  /* 按钮行：横向滚动，绝不折行 */
+  .quiz-bank-actions {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 5px;
+    justify-content: flex-start;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  /* 移动端按钮紧凑尺寸，避免撑高卡片 */
+  .quiz-bank-actions .quiz-btn {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+
+  /* --- 答题卡：更大格子 --- */
+  .quiz-sheet-grid {
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 8px;
+  }
+
+  .quiz-sheet-cell {
+    width: 44px;
+    height: 44px;
+    font-size: 13px;
+  }
+
+  /* --- 统计：两列 --- */
+  .quiz-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--quiz-gap-xs);
+  }
+
+  .quiz-stat-card {
+    padding: 14px 10px;
+  }
+
+  .quiz-stat-value {
+    font-size: 22px;
+  }
+
+  /* --- 搜索框：纵向堆叠 --- */
+  .quiz-search-box {
+    flex-direction: column;
+    gap: var(--quiz-gap-xs);
+  }
+
+  .quiz-search-input,
+  .quiz-search-select {
+    width: 100%;
+    min-height: var(--quiz-touch);
+    font-size: 15px;   /* ≥16px 防 iOS 缩放，安卓同样更舒适 */
+  }
+
+  /* --- 表单控件：移动端更易点按 --- */
+  .quiz-edit-input,
+  .quiz-edit-textarea {
+    font-size: 15px;
+    padding: 12px 14px;
+  }
+
+  .quiz-group-row {
+    padding: 12px 14px;
+  }
+
+  .quiz-group-input,
+  .quiz-group-draw-input {
+    width: 72px;
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .quiz-group-check {
+    font-size: 13.5px;
+    min-height: 36px;
+  }
+
+  .quiz-group-filter-row {
+    padding: 12px 14px;
+    gap: 8px 14px;
+  }
+
+  /* --- 导入区 --- */
+  .quiz-import-dropzone {
+    min-height: 150px;
+    padding: 24px 16px;
+  }
+
+  .quiz-import-area {
+    font-size: 13px;
+    min-height: 150px;
+  }
+
+  /* --- 章节树：行更高、更易点按 --- */
+  .quiz-chapter-row {
+    padding: 14px 12px;
+    min-height: var(--quiz-touch);
+  }
+
+  .quiz-chapter-label {
+    font-size: 14px;
+  }
+
+  .quiz-chapter-check {
+    width: 22px;
+    height: 22px;
+  }
+
+  .quiz-chapter-badge {
+    min-width: 38px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .quiz-chapter-floatbar {
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    gap: var(--quiz-gap-xs);
+  }
+
+  .quiz-chapter-floatbar .quiz-btn {
+    min-height: var(--quiz-touch);
+    flex: 1 1 auto;
+  }
+
+  /* --- 列表项 --- */
+  .quiz-list-item {
+    padding: 14px 15px;
+  }
+
+  /* --- 模态框 --- */
+  .quiz-modal {
+    max-height: 88vh;
+  }
+
+  .quiz-modal-title {
+    font-size: 18px;
+    margin-bottom: var(--quiz-gap);
+  }
+
+  .quiz-confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .quiz-confirm-actions .quiz-btn {
+    width: 100%;
+    min-height: var(--quiz-touch);
+  }
+
+  /* --- 上下文菜单：移动端更宽的点击行 --- */
+  .quiz-context-menu {
+    min-width: 180px;
+    padding: 8px;
+  }
+
+  .quiz-context-menu-item {
+    padding: 13px 15px;
+    font-size: 14px;
+    min-height: var(--quiz-touch);
+    display: flex;
+    align-items: center;
+  }
+}
+
+/* ============================================================
+   29. 安卓平板 / 宽屏触控设备优化
+   ------------------------------------------------------------
+   平板有足够空间，因此采用「多列 + 适中留白」策略，
+   而不是手机端的单列拉伸。
+   ============================================================ */
+@media (min-width: 769px) and (max-width: 1280px) {
+  .quiz-container {
+    padding: 24px 28px;
+    /* v2.7.6: 这里原本还有 max-width: 100%，与容器的 1040px 叠加后
+       造成「1280px 全宽、1281px 反而变窄」的断层。容器已改为不限宽，此行删除。 */
+    --quiz-opt-fs: calc(15px * var(--quiz-font-scale, 1));   /* 平板题干/选项统一字号，序号对齐计算自动跟随 */
+  }
+
+  .quiz-question-card {
+    padding: 26px 28px;
+    border-radius: var(--quiz-radius-lg);
+  }
+
+  .quiz-option {
+    padding: 5px 7px;        /* 内边距减半（原 10px 14px） */
+  }
+
+  .quiz-sheet-grid {
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  }
+
+  .quiz-sheet-cell {
+    width: 42px;
+    height: 42px;
+  }
+
+  /* 平板：统计卡片宽度上限由第 17 节统一控制，这里不再覆盖列数 */
+
+  /* v2.7.6: 题库列表列数统一由第 26 节决定（始终两列）。
+     这里原来用 auto-fill minmax(320px, 1fr)，1280px 下会变四列、和宽屏的
+     两列不一致，已删除。 */
+
+  /* 平板按钮保持适中触控 */
+  .quiz-btn {
+    min-height: 38px;
+  }
+
+  .quiz-nav-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* 平板：章节树限制行宽，避免单行过长 */
+  .quiz-chapter-label {
+    font-size: 14.5px;
+  }
+}
+
+/* 安卓平板专用容器（由 JS 添加 .quiz-android-tablet 类）——全屏铺满 */
+@media (min-width: 600px) {
+  .quiz-container.quiz-android-tablet {
+    width: 100%;
+    max-width: none;
+    min-height: 100%;
+    padding: 24px 28px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* v2.7.6: 这里原本还有一组写死 900px 的宽度上限（题干 / 操作栏 / 进度条 / 导航），
+     与第 33 节按令牌（1600 / 1080）的规则冲突，且特异性相同、位置更靠前，
+     结果在 ≥1024px 的安卓平板上出现「导航 900、列表 953~1209」的错位——
+     与桌面端修过的那个 bug 一模一样。宽度已全部交给第 33 节，这里只保留内边距。 */
+}
+
+/* 安卓全屏 Modal 的 16px 内边距只适合手机：平板上内容几乎贴边。
+   ≥769px 起与桌面 ItemView 用同一套内边距（基准 20px，平板区间 24/28）。 */
+@media (min-width: 769px) {
+  .quiz-mobile-content {
+    padding: var(--quiz-gap-lg, 20px) !important;
+    padding-bottom: calc(var(--quiz-gap-lg, 20px) + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1280px) {
+  .quiz-mobile-content {
+    padding: 24px 28px !important;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* ============================================================
+   30. 无障碍与偏好
+   ============================================================ */
+
+/* 减少动画 */
+@media (prefers-reduced-motion: reduce) {
+  .quiz-container,
+  .quiz-container *,
+  .quiz-modal,
+  .quiz-modal * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* 高对比度 */
+@media (prefers-contrast: high) {
+  .quiz-option {
+    border-width: 2px;
+  }
+
+  .quiz-option.correct {
+    border-width: 3px;
+  }
+
+  .quiz-option.wrong {
+    border-width: 3px;
+  }
+
+  .quiz-question-type {
+    border-width: 2px;
+  }
+}
+
+/* 触控设备：移除 hover 位移，防误触抖动 */
+@media (hover: none) {
+  .quiz-bank-card:hover,
+  .quiz-stat-card:hover,
+  .quiz-sheet-cell:hover,
+  .quiz-similar-item:hover,
+  .quiz-option:hover:not(.disabled) {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   31. 打印样式
+   ============================================================ */
+@media print {
+  .quiz-nav,
+  .quiz-actions,
+  .quiz-nav-btn,
+  .quiz-btn,
+  .quiz-chapter-floatbar {
+    display: none !important;
+  }
+
+  .quiz-container {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .quiz-question-card {
+    border: 1px solid #000;
+    border-radius: 0;
+    box-shadow: none;
+    page-break-inside: avoid;
+    margin-bottom: 16px;
+  }
+
+  .quiz-option {
+    border: 1px solid #333;
+    border-radius: 0;
+  }
+
+  .quiz-option.correct {
+    border: 2px solid #000;
+    font-weight: bold;
+  }
+
+  .quiz-analysis {
+    border: 1px solid #666;
+  }
+}
+
+/* ============================================================
+   32. 滚动条美化
+   ============================================================ */
+.quiz-modal::-webkit-scrollbar,
+.quiz-container::-webkit-scrollbar,
+.quiz-mobile-content::-webkit-scrollbar,
+.quiz-import-preview::-webkit-scrollbar,
+.quiz-import-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.quiz-modal::-webkit-scrollbar-thumb,
+.quiz-container::-webkit-scrollbar-thumb,
+.quiz-mobile-content::-webkit-scrollbar-thumb,
+.quiz-import-preview::-webkit-scrollbar-thumb,
+.quiz-import-area::-webkit-scrollbar-thumb {
+  background: var(--quiz-card-border);
+  border-radius: var(--quiz-radius-pill);
+}
+
+.quiz-modal::-webkit-scrollbar-thumb:hover,
+.quiz-container::-webkit-scrollbar-thumb:hover,
+.quiz-mobile-content::-webkit-scrollbar-thumb:hover {
+  background: var(--quiz-text-faint);
+}
+
+.quiz-modal::-webkit-scrollbar-track,
+.quiz-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+   33. 宽屏适配（v2.7.6）
+   ------------------------------------------------------------
+   容器跟随窗口（不限宽），内容宽度由两个令牌控制：
+     --quiz-page-width  页面内容宽度：导航、列表、章节、统计、搜索、空状态共用
+     --quiz-read-width  答题页阅读宽度：题干与选项是连续成段的正文，过宽会串行
+
+   规则：容器下「所有」直接子区块统一加 max-width + 左右 auto，导航与内容
+   共用同一宽度，左右边界因此严格对齐；答题页由 JS 加的 .quiz-question-view
+   整体切到阅读宽度，该页内部（进度条、导航、题干、解析、操作栏）依然全部对齐。
+
+   v2.7.6 修正一：上一版把 .quiz-nav 放进了阅读宽度组，而列表 / 章节 / 搜索
+   的内容是页面宽度，导致这些页面的导航比内容窄 520px、两侧各缩进 260px，
+   看着「上下不对齐」；同时浮动栏与空状态漏了宽度约束，会撑满整个容器。
+
+   v2.7.6 修正二（手机 / 平板）：
+   1) 整节收进 min-width: 769px。手机端 .quiz-actions 是吸底通栏，
+      靠 -14px / -16px 负边距抵消容器内边距才能贴到屏幕两边；上一版这里的
+      margin:auto 特异性更高、位置更靠后，把负边距覆盖成了 0，
+      于是手机底部操作栏缩进 14/16px、两侧露出白边。手机端本身没有多余
+      宽度，不需要任何限宽规则。
+   2) 答题页识别从 :has() 改为 JS 加的 .quiz-question-view。
+      Android WebView 只有 Chrome 105+ 才支持 :has()，旧机型上整组失效，
+      题干会铺到整屏宽、行长失控。现在与 WebView 版本无关。
+   ============================================================ */
+@media (min-width: 769px) {
+  /* 页面级区块：所有视图共用同一宽度，左右边界因此严格一致 */
+  .quiz-container > .quiz-nav,
+  .quiz-container > .quiz-progress-bar,
+  .quiz-container > .quiz-question-card,
+  .quiz-container > .quiz-actions,
+  .quiz-container > .quiz-result,
+  .quiz-container > .quiz-analysis,
+  .quiz-container > .quiz-bank-list,
+  .quiz-container > .quiz-chapter-tree,
+  .quiz-container > .quiz-stats,
+  .quiz-container > .quiz-search-box,
+  .quiz-container > .quiz-search-results,
+  .quiz-container > .quiz-empty,
+  .quiz-container > .quiz-empty-text,
+  .quiz-container > .quiz-chapter-floatbar {
+    max-width: var(--quiz-page-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* 答题页整体收窄到阅读宽度：导航、进度条、解析、操作栏一并跟随，
+     避免只有题干收窄、上下两端的导航条横向超出题干卡片。 */
+  .quiz-container.quiz-question-view > .quiz-nav,
+  .quiz-container.quiz-question-view > .quiz-progress-bar,
+  .quiz-container.quiz-question-view > .quiz-question-card,
+  .quiz-container.quiz-question-view > .quiz-actions,
+  .quiz-container.quiz-question-view > .quiz-result,
+  .quiz-container.quiz-question-view > .quiz-analysis {
+    max-width: var(--quiz-read-width);
+  }
+}
+
+/* ============================================================
+   34. 触控平板（≥769px）：热区不低于手机
+   ------------------------------------------------------------
+   769px 以上走桌面布局，但平板是触控设备。实测同一插件在
+   768px（手机布局）与 800px（平板布局）下的热区：
+
+     元素            768px    800px
+     导航按钮         44       40
+     答题卡格         44       42
+     搜索输入/下拉    44       41
+     上下文菜单项     46       39
+     组卷勾选标签     36       26      ← 几乎点不中
+     章节复选框       22       18
+
+   平板反而比手机更难点，方向是反的。这里把 769px 以上、无悬停能力
+   （即触控）的设备补到与手机持平。接了鼠标的平板 / 触控本仍报
+   (hover: hover)，保持紧凑尺寸不受影响。
+   ============================================================ */
+@media (hover: none) and (min-width: 769px) {
+  .quiz-nav-btn {
+    width: var(--quiz-touch);
+    height: var(--quiz-touch);
+  }
+
+  .quiz-nav-btn.quiz-font-btn {
+    width: var(--quiz-touch);
+    font-size: 13px;
+  }
+
+  .quiz-sheet-cell {
+    width: var(--quiz-touch);
+    height: var(--quiz-touch);
+  }
+
+  .quiz-search-input,
+  .quiz-search-select {
+    min-height: var(--quiz-touch);
+  }
+
+  .quiz-context-menu-item {
+    min-height: var(--quiz-touch);
+    padding: 12px 15px;
+  }
+
+  /* 智能组卷的勾选行：26px 高几乎点不中 */
+  .quiz-group-check {
+    min-height: var(--quiz-touch);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .quiz-chapter-check {
+    width: 22px;
+    height: 22px;
+  }
+}

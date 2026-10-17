@@ -1,0 +1,10 @@
+{
+  "id": "quiz-bank",
+  "name": "Quiz Bank",
+  "version": "2.7.6",
+  "minAppVersion": "1.5.8",
+  "description": "导入 CSV/TSV/Excel 题库，支持单选、多选、判断、错题集、收藏与智能组卷。Import CSV, TSV and Excel question banks. Practise single-choice, multi-choice and true/false questions with wrong-answer review, favourites and smart paper generation.",
+  "author": "灰辉故事绘（B站）",
+  "authorUrl": "https://github.com/putiwushu1234",
+  "isDesktopOnly": false
+}
